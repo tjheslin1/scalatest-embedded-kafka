@@ -1,7 +1,9 @@
 package net.manub.embeddedkafka
 
-import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
+import java.net.ServerSocket
+
 import net.manub.embeddedkafka.EmbeddedKafka._
+import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 
 import scala.collection.JavaConverters._
 import scala.reflect.io.Directory
@@ -12,11 +14,10 @@ class EmbeddedKafkaObjectSpec extends EmbeddedKafkaSpecSupport {
 
   "the EmbeddedKafka object" when {
     "invoking the start and stop methods" should {
-      "start and stop Kafka and Zookeeper on the default ports" in {
-        EmbeddedKafka.start()
-
-        kafkaIsAvailable()
-        zookeeperIsAvailable()
+      "start and stop Kafka and Zookeeper on the default ports" in new TestContext {
+        EmbeddedKafka.start()(someConfig)
+        kafkaIsAvailable(kafkaPort)
+        zookeeperIsAvailable(zookeeperPort)
 
         EmbeddedKafka.stop()
 
@@ -24,43 +25,39 @@ class EmbeddedKafkaObjectSpec extends EmbeddedKafkaSpecSupport {
         zookeeperIsNotAvailable()
       }
 
-      "start and stop Kafka and Zookeeper on different specified ports using an implicit configuration" in {
-        implicit val config =
-          EmbeddedKafkaConfig(kafkaPort = 12345, zooKeeperPort = 54321)
-        EmbeddedKafka.start()
+      "start and stop Kafka and Zookeeper on different specified ports using an implicit configuration" in new TestContext {
+        EmbeddedKafka.start()(someConfig)
 
-        kafkaIsAvailable(12345)
-        zookeeperIsAvailable(54321)
+        kafkaIsAvailable(kafkaPort)
+        zookeeperIsAvailable(zookeeperPort)
 
         EmbeddedKafka.stop()
       }
 
-      "start and stop a specific Kafka" in {
-        val firstBroker = EmbeddedKafka.start()(EmbeddedKafkaConfig(kafkaPort = 7000, zooKeeperPort = 7001))
-        EmbeddedKafka.start()(EmbeddedKafkaConfig(kafkaPort = 8000, zooKeeperPort = 8001))
+      "start and stop a specific Kafka" in new TestContext {
+        val firstBroker = EmbeddedKafka.start()(someConfig)
+        EmbeddedKafka.start()(someOtherConfig)
 
-        kafkaIsAvailable(7000)
-        zookeeperIsAvailable(7001)
+        kafkaIsAvailable(kafkaPort)
+        zookeeperIsAvailable(zookeeperPort)
 
-        kafkaIsAvailable(8000)
-        zookeeperIsAvailable(8001)
+        kafkaIsAvailable(anotherKafkaPort)
+        zookeeperIsAvailable(anotherZookeeperPort)
 
         EmbeddedKafka.stop(firstBroker)
 
-        kafkaIsNotAvailable(7000)
-        zookeeperIsNotAvailable(7001)
+        kafkaIsNotAvailable(kafkaPort)
+        zookeeperIsNotAvailable(zookeeperPort)
 
-        kafkaIsAvailable(8000)
-        zookeeperIsAvailable(8001)
+        kafkaIsAvailable(anotherKafkaPort)
+        zookeeperIsAvailable(anotherZookeeperPort)
 
         EmbeddedKafka.stop()
       }
 
-      "start and stop multiple Kafka instances on specified ports" in {
-        val someConfig = EmbeddedKafkaConfig(kafkaPort = 12345, zooKeeperPort = 32111)
+      "start and stop multiple Kafka instances on specified ports" in new TestContext {
         val someBroker = EmbeddedKafka.start()(someConfig)
 
-        val someOtherConfig = EmbeddedKafkaConfig(kafkaPort = 23456, zooKeeperPort = 43211)
         val someOtherBroker = EmbeddedKafka.start()(someOtherConfig)
 
         val topic = "publish_test_topic_1"
@@ -84,35 +81,48 @@ class EmbeddedKafkaObjectSpec extends EmbeddedKafkaSpecSupport {
         val someOtherRecord = moreRecords.iterator().next
         someOtherRecord.value shouldBe someOtherMessage
 
-        EmbeddedKafka.stop(someOtherBroker)
+        EmbeddedKafka.stop()
       }
     }
 
     "invoking the isRunning method" should {
-      "return true when both Kafka and Zookeeper are running" in {
-        EmbeddedKafka.start()
+      "return true when both Kafka and Zookeeper are running" in new TestContext {
+        EmbeddedKafka.start()(someConfig)
         EmbeddedKafka.isRunning shouldBe true
         EmbeddedKafka.stop()
         EmbeddedKafka.isRunning shouldBe false
       }
 
-      "return false when only Kafka is running" in {
-        val unmanagedZookeeper = EmbeddedKafka.startZooKeeper(6000, Directory.makeTemp("zookeeper-test-logs"))
+      "return true when only Kafka is running" in new TestContext {
+        val unmanagedZookeeper = EmbeddedKafka.startZooKeeper(randomAvailablePort, Directory.makeTemp("zookeeper-test-logs"))
 
-        EmbeddedKafka.startKafka(Directory.makeTemp("kafka-test-logs"))
-        EmbeddedKafka.isRunning shouldBe false
+        EmbeddedKafka.startKafka(Directory.makeTemp("kafka-test-logs"))(someConfig)
+        EmbeddedKafka.isRunning shouldBe true
         EmbeddedKafka.stop()
         EmbeddedKafka.isRunning shouldBe false
 
         unmanagedZookeeper.shutdown()
       }
 
-      "return false when only Zookeeper is running" in {
-        EmbeddedKafka.startZooKeeper(Directory.makeTemp("zookeeper-test-logs"))
+      "return false when only Zookeeper is running" in new TestContext {
+        EmbeddedKafka.startZooKeeper(Directory.makeTemp("zookeeper-test-logs"))(someConfig)
         EmbeddedKafka.isRunning shouldBe false
         EmbeddedKafka.stop()
         EmbeddedKafka.isRunning shouldBe false
       }
     }
+  }
+
+  private class TestContext {
+    val kafkaPort = randomAvailablePort
+    val zookeeperPort = randomAvailablePort
+
+    val anotherKafkaPort = randomAvailablePort
+    val anotherZookeeperPort = randomAvailablePort
+
+    val someConfig = EmbeddedKafkaConfig(kafkaPort = kafkaPort, zooKeeperPort = zookeeperPort)
+    val someOtherConfig = EmbeddedKafkaConfig(kafkaPort = anotherKafkaPort, zooKeeperPort = anotherZookeeperPort)
+
+    def randomAvailablePort: Int = new ServerSocket(0).getLocalPort
   }
 }
