@@ -94,14 +94,14 @@ class EmbeddedKafkaObjectSpec extends EmbeddedKafkaSpecSupport {
       }
 
       "return true when only Kafka is running" in new TestContext {
-        val unmanagedZookeeper = EmbeddedKafka.startZooKeeper(randomAvailablePort, Directory.makeTemp("zookeeper-test-logs"))
+        val unmanagedZookeeper = EmbeddedKafka.startZooKeeper(Directory.makeTemp("zookeeper-test-logs"))(someConfig)
 
         EmbeddedKafka.startKafka(Directory.makeTemp("kafka-test-logs"))(someConfig)
         EmbeddedKafka.isRunning shouldBe true
         EmbeddedKafka.stop()
         EmbeddedKafka.isRunning shouldBe false
 
-        unmanagedZookeeper.shutdown()
+        unmanagedZookeeper.stop(true)
       }
 
       "return false when only Zookeeper is running" in new TestContext {

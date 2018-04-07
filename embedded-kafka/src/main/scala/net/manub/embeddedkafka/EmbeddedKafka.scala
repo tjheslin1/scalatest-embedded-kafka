@@ -118,9 +118,9 @@ object EmbeddedKafka extends EmbeddedKafkaSupport {
   }
 
   /**
-    * Returns whether the in memory Kafka and Zookeeper are both running.
+    * Returns `true` if at least one in memory Kafka instance is running.
     */
-  def isRunning: Boolean = servers.toFilteredSeq[EmbeddedK](isEmbeddedK).exists(_.factory.isDefined)
+  def isRunning: Boolean = servers.toFilteredSeq[EmbeddedK](isEmbeddedK).nonEmpty
 
   private def isEmbeddedK(server: EmbeddedServer): Boolean = server.isInstanceOf[EmbeddedK]
   private def isEmbeddedZ(server: EmbeddedServer): Boolean = server.isInstanceOf[EmbeddedZ]
